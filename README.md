@@ -1,2 +1,2 @@
 # InputOverlay
-Replace with your mod's readme!
+View the GameBanana page https://gamebanana.com/mods/518850
