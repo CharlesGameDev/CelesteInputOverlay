@@ -8,6 +8,7 @@ public class InputOverlaySettings : EverestModuleSettings {
     public bool Enabled { get; set; } = true;
 
     public bool HideWhenPaused { get; set; } = false;
+    public bool HideOutsideOfLevels { get; set; } = false;
     public bool TextOutline { get; set; } = true;
 
     [SettingRange(0, 160, true), SettingSubText("Default: 50")]
