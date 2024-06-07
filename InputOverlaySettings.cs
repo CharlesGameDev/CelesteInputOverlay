@@ -11,6 +11,8 @@ public class InputOverlaySettings : EverestModuleSettings {
     public bool HideOutsideOfLevels { get; set; } = false;
     public bool TextOutline { get; set; } = true;
 
+    public Corners Corner { get; set; }
+
     [SettingRange(0, 160, true), SettingSubText("Default: 50")]
     public int ButtonSize { get; set; } = 50;
     [SettingRange(0, 20), SettingSubText("Default: 5")]

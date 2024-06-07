@@ -1,8 +1,11 @@
-﻿using Microsoft.Xna.Framework;
+﻿using Celeste.Editor;
+using Microsoft.Xna.Framework;
 using Microsoft.Xna.Framework.Graphics;
 using Monocle;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.Linq;
 using CelesteSettings = Celeste.Settings;
 
 namespace Celeste.Mod.InputOverlay;
@@ -11,7 +14,7 @@ public class InputOverlay : EverestModule {
     public static InputOverlay Instance { get; private set; }
 
     public override Type SettingsType => typeof(InputOverlaySettings);
-    public static InputOverlaySettings Settings => (InputOverlaySettings) Instance._Settings;
+    public static InputOverlaySettings Settings => (InputOverlaySettings)Instance._Settings;
 
     public static IReadOnlyList<IReadOnlyList<InputOverlayButton>> Buttons { get; private set; } = [
         [new("Jump", () => Input.Jump.Check), new("Up", () => Input.MoveY < 0), new("Grab", () => Input.Grab.Check)],
@@ -19,20 +22,32 @@ public class InputOverlay : EverestModule {
         [new("Dash", () => Input.Dash.Check), new("Demo", () => Input.CrouchDash.Check), new("Talk", () => Input.Talk.Check)]
     ];
 
-    readonly static float StartX = 30;
-    static float StartY
+    public static readonly Dictionary<Corners, Corner> CornerPositions = new() {
+        { Corners.TopLeft, new(() => 30, GetTopLeftCornerY, false, false) },
+        { Corners.TopRight, new(() => Engine.Width - 100, () => 30, true, false) },
+        { Corners.BottomLeft, new(() => 30, () => Engine.Height - 100, false, true) },
+        { Corners.BottomRight, new(() => Engine.Width - 100, GetBottomRightCornerY, true, true) },
+    };
+
+    static float GetTopLeftCornerY()
     {
-        get
+        if (Engine.Scene is not Level)
+            return 30;
+        return CelesteSettings.Instance.SpeedrunClock switch
         {
-            if (Engine.Scene is not Level)
-                return 30;
-            return CelesteSettings.Instance.SpeedrunClock switch
-            {
-                SpeedrunType.Chapter => 110,
-                SpeedrunType.File => 130,
-                _ => 30,
-            };
-        }
+            SpeedrunType.Chapter => 110,
+            SpeedrunType.File => 130,
+            _ => 30,
+        };
+    }
+
+    static float GetBottomRightCornerY()
+    {
+        if (Engine.Scene is MapEditor)
+            return Engine.Height - 280;
+        if (Engine.Scene is not Level && Engine.Scene is not AssetReloadHelper && Engine.Scene is not LevelExit)
+            return Engine.Height - 180;
+        return Engine.Height - 100;
     }
 
     static float ButtonSize => Settings.ButtonSize;
@@ -74,6 +89,9 @@ public class InputOverlay : EverestModule {
         orig(self);
 
         if (!Settings.Enabled
+            || Engine.Scene is GameLoader
+            || Engine.Scene is OverworldLoader
+            || Engine.Scene is LevelLoader
             || Fonts.loadedFonts.Count == 0
             || (Engine.Scene.Paused && Settings.HideWhenPaused)
             || (Settings.HideOutsideOfLevels && Engine.Scene is not Level)) return;
@@ -82,21 +100,38 @@ public class InputOverlay : EverestModule {
 
     private static void Render()
     {
-        float x;
-        float y = StartY;
+        Draw.SpriteBatch.Begin(0, BlendState.AlphaBlend, SamplerState.LinearClamp, DepthStencilState.None, RasterizerState.CullNone, null, Engine.ScreenMatrix);
 
-        foreach (IReadOnlyList<InputOverlayButton> row in Buttons)
+        Corner corner = CornerPositions[Settings.Corner];
+        float x;
+        float y = corner.StartY();
+        float xMul = corner.ReverseX ? -1 : 1;
+        float yMul = corner.ReverseY ? -1 : 1;
+
+        IEnumerable<IReadOnlyList<InputOverlayButton>> btns = Buttons;
+        if (corner.ReverseY)
+            btns = btns.Reverse();
+
+        foreach (var _row in btns)
         {
-            x = StartX;
-            foreach (InputOverlayButton btn in row)
-                DrawButton(btn, ref x, y);
-            y += ButtonSize + ButtonPadY;
+            x = corner.StartX();
+            IEnumerable<InputOverlayButton> row = _row;
+            if (corner.ReverseX)
+                row = row.Reverse();
+
+            foreach (var btn in row)
+            {
+                DrawButton(btn, x, y);
+                x += (ButtonSize + ButtonPadX) * xMul;
+            }
+            y += (ButtonSize + ButtonPadY) * yMul;
         }
+
+        Draw.SpriteBatch.End();
     }
 
-    static void DrawButton(InputOverlayButton btn, ref float x, float y)
+    static void DrawButton(InputOverlayButton btn, float x, float y)
     {
-        Draw.SpriteBatch.Begin(0, BlendState.AlphaBlend, SamplerState.LinearClamp, DepthStencilState.None, RasterizerState.CullNone, null, Engine.ScreenMatrix);
         Draw.Rect(x, y, ButtonSize, ButtonSize, btn.Value() ? ButtonBGPressed : ButtonBG);
         Draw.HollowRect(x, y, ButtonSize, ButtonSize, ButtonOutline);
         Vector2 pos = new(x + (ButtonSize / 2), y + (ButtonSize / 2));
@@ -107,7 +142,5 @@ public class InputOverlay : EverestModule {
             else
                 ActiveFont.Draw(btn.Text, pos, ButtonTextJustify, ButtonTextScale, TextColor);
         } catch (ArgumentOutOfRangeException) { }
-        x += ButtonSize + ButtonPadX;
-        Draw.SpriteBatch.End();
     }
 }
